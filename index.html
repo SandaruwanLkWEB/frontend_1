@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="si">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>DSI Transport (Places-Only v4)</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      Redirecting...
+    </div>
+  </div>
+  <script type="module">
+    import { getToken, getUser, roleHome, fetchMe } from './js/auth.js';
+
+    const token = getToken();
+    const user = getUser();
+    if(token && user){
+      // Try refresh silently
+      fetchMe().catch(()=>{}).finally(()=>{
+        const u = JSON.parse(localStorage.getItem('user')||'null');
+        location.href = roleHome(u?.role);
+      });
+    } else {
+      location.href = 'pages/login.html';
+    }
+  </script>
+</body>
+</html>

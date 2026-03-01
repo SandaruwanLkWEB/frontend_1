@@ -1,0 +1,140 @@
+:root{
+  --bg1:#f5f7ff;
+  --bg2:#ffffff;
+  --text:#0f172a;
+  --muted:#475569;
+  --card:rgba(255,255,255,.65);
+  --stroke:rgba(15,23,42,.12);
+  --shadow:0 18px 50px rgba(15,23,42,.12);
+  --accent:#4f46e5;
+  --accent2:#22c55e;
+  --danger:#ef4444;
+  --input-bg:rgba(255,255,255,.9);
+  --input-text:#0f172a;
+}
+
+[data-theme='dark']{
+  --bg1:#0b1220;
+  --bg2:#0b1220;
+  --text:#e5e7eb;
+  --muted:#94a3b8;
+  --card:rgba(15,23,42,.55);
+  --stroke:rgba(148,163,184,.18);
+  --shadow:0 18px 50px rgba(0,0,0,.45);
+  --accent:#818cf8;
+  --accent2:#34d399;
+  --danger:#fb7185;
+  --input-bg:rgba(2,6,23,.55);
+  --input-text:#e5e7eb; /* typed text visible */
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Noto Sans Sinhala", "Noto Sans", sans-serif;
+  color:var(--text);
+  background: radial-gradient(1200px 600px at 20% 10%, rgba(79,70,229,.18), transparent 55%),
+              radial-gradient(900px 500px at 80% 30%, rgba(34,197,94,.14), transparent 60%),
+              linear-gradient(180deg, var(--bg1), var(--bg2));
+}
+
+a{color:var(--accent); text-decoration:none}
+
+.container{max-width:1100px;margin:0 auto;padding:22px}
+
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  position:sticky;top:0;z-index:10;
+  padding:14px 18px;margin:14px auto 18px;
+  max-width:1100px;
+  background:var(--card);
+  border:1px solid var(--stroke);
+  border-radius:18px;
+  backdrop-filter: blur(14px);
+  box-shadow: var(--shadow);
+}
+.brand{display:flex;align-items:center;gap:10px}
+.badge{
+  width:36px;height:36px;border-radius:12px;
+  background: linear-gradient(135deg, rgba(79,70,229,.85), rgba(34,197,94,.65));
+  box-shadow: 0 14px 30px rgba(79,70,229,.25);
+}
+.brand h1{font-size:16px;margin:0;line-height:1.1}
+.brand small{display:block;color:var(--muted)}
+
+.actions{display:flex;gap:10px;align-items:center}
+
+.btn{
+  border:1px solid var(--stroke);
+  background:rgba(255,255,255,.15);
+  color:var(--text);
+  padding:10px 12px;
+  border-radius:14px;
+  cursor:pointer;
+  backdrop-filter: blur(10px);
+}
+.btn.primary{background:rgba(79,70,229,.16);border-color:rgba(79,70,229,.35)}
+.btn.danger{background:rgba(239,68,68,.12);border-color:rgba(239,68,68,.35)}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}
+.card{
+  grid-column: span 12;
+  background: var(--card);
+  border:1px solid var(--stroke);
+  border-radius:18px;
+  padding:16px;
+  backdrop-filter: blur(14px);
+  box-shadow: var(--shadow);
+}
+
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.kpi{padding:14px;border-radius:18px;border:1px solid var(--stroke);background:rgba(255,255,255,.1)}
+.kpi .v{font-size:22px;font-weight:800}
+.kpi .l{color:var(--muted);font-size:12px;margin-top:4px}
+
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.tab{padding:9px 12px;border-radius:999px;border:1px solid var(--stroke);background:rgba(255,255,255,.10);cursor:pointer}
+.tab.active{background:rgba(79,70,229,.14);border-color:rgba(79,70,229,.35)}
+
+label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+input,select,textarea{
+  width:100%;
+  padding:11px 12px;
+  border-radius:14px;
+  border:1px solid var(--stroke);
+  background: var(--input-bg);
+  color: var(--input-text);
+  outline:none;
+}
+input::placeholder{color:rgba(148,163,184,.9)}
+
+.row{display:grid;grid-template-columns:repeat(12,1fr);gap:12px}
+.col-6{grid-column:span 6}
+.col-4{grid-column:span 4}
+.col-3{grid-column:span 3}
+.col-12{grid-column:span 12}
+
+.table{width:100%;border-collapse:collapse}
+.table th,.table td{padding:10px;border-bottom:1px solid var(--stroke);text-align:left;font-size:13px}
+.table th{color:var(--muted);font-weight:700}
+
+.toast{
+  position:fixed; right:18px; bottom:18px; z-index:9999;
+  background: var(--card);
+  border:1px solid var(--stroke);
+  border-radius:16px;
+  padding:12px 14px;
+  box-shadow: var(--shadow);
+  min-width:260px;
+}
+.toast.ok{border-color: rgba(34,197,94,.45)}
+.toast.err{border-color: rgba(239,68,68,.45)}
+
+@media (max-width: 900px){
+  .kpis{grid-template-columns:repeat(2,1fr)}
+  .col-6{grid-column:span 12}
+  .col-4{grid-column:span 12}
+  .col-3{grid-column:span 12}
+}

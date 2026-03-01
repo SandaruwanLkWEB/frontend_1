@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="si">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>HOD Dashboard - DSI Transport</title>
+  <link rel="stylesheet" href="../assets/styles.css" />
+</head>
+<body>
+  <div id="top"></div>
+  <div class="container">
+
+    <div class="card">
+      <div class="tabs" id="tabs">
+        <button class="tab active" data-tab="emp">👥 Employees</button>
+        <button class="tab" data-tab="req">📨 Daily Request</button>
+      </div>
+
+      <div data-panel="emp">
+        <div class="row">
+          <div class="col-3"><label>EMP No</label><input id="empNo" placeholder="EMP001"/></div>
+          <div class="col-3"><label>නම</label><input id="empName" placeholder="නම"/></div>
+          <div class="col-6">
+            <label>Drop Place Search</label>
+            <input id="placeQ" placeholder="Place title / address"/>
+            <div style="height:8px"></div>
+            <select id="placeSel"></select>
+          </div>
+          <div class="col-12" style="display:flex;gap:10px">
+            <button class="btn primary" id="saveEmp">Save</button>
+            <button class="btn" id="clearEmp">Clear</button>
+          </div>
+        </div>
+        <div style="height:12px"></div>
+        <table class="table" id="empTable"></table>
+      </div>
+
+      <div data-panel="req" style="display:none">
+        <div class="row">
+          <div class="col-3"><label>දිනය</label><input id="rDate" type="date"/></div>
+          <div class="col-3"><label>වේලාව</label><input id="rTime" type="time"/></div>
+          <div class="col-6"><label>Employees (Select)</label>
+            <select id="empMulti" multiple size="8"></select>
+            <small style="color:var(--muted)">Ctrl/Long-press මගින් multi-select</small>
+          </div>
+          <div class="col-12" style="display:flex;gap:10px">
+            <button class="btn primary" id="submitReq">Submit Request</button>
+          </div>
+        </div>
+        <div style="height:12px"></div>
+        <table class="table" id="reqTable"></table>
+      </div>
+
+    </div>
+  </div>
+
+<script type="module">
+  import { mountTopbar } from '../js/layout.js';
+  import { toast, setActiveTab } from '../js/ui.js';
+  import { requireLogin } from '../js/auth.js';
+  import { api } from '../js/api.js';
+
+  mountTopbar({ root: document.querySelector('#top'), title: 'HOD Dashboard' });
+  const ctx = requireLogin();
+  if(ctx.user.role!=='HOD'){
+    toast('Forbidden','err');
+    location.href = '../index.html';
+  }
+
+  const tabs = document.querySelector('#tabs');
+  tabs.addEventListener('click', (e)=>{
+    const b = e.target.closest('[data-tab]');
+    if(!b) return;
+    setActiveTab(tabs, b.dataset.tab);
+  });
+
+  let selectedEmpId = null;
+  let placeTimer;
+
+  async function searchPlaces(q){
+    const rows = await api.get(`/lookup/places/search?q=${encodeURIComponent(q)}`);
+    const sel = document.querySelector('#placeSel');
+    sel.innerHTML = rows.map(p=>`<option value="${p.place_id}">${p.title} — ${p.address||''}</option>`).join('');
+  }
+
+  document.querySelector('#placeQ').addEventListener('input', (e)=>{
+    const q = e.target.value.trim();
+    clearTimeout(placeTimer);
+    placeTimer = setTimeout(()=>{ if(q.length>=2) searchPlaces(q); }, 280);
+  });
+
+  async function loadEmployees(){
+    const rows = await api.get('/hod/employees');
+    const t = document.querySelector('#empTable');
+    t.innerHTML = `
+      <tr><th>EMP No</th><th>Name</th><th>Drop Place</th><th></th></tr>
+      ${rows.map(e=>`<tr>
+        <td>${e.emp_no}</td>
+        <td>${e.name}</td>
+        <td>${e.place_title||''}</td>
+        <td>
+          <button class="btn" data-edit='${JSON.stringify(e).replace(/'/g,'&apos;')}'>Edit</button>
+          <button class="btn danger" data-del="${e.id}">Delete</button>
+        </td>
+      </tr>`).join('')}
+    `;
+
+    const multi = document.querySelector('#empMulti');
+    multi.innerHTML = rows.map(e=>`<option value="${e.id}">${e.emp_no} ${e.name}</option>`).join('');
+
+    t.querySelectorAll('[data-edit]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const e = JSON.parse(btn.dataset.edit);
+        selectedEmpId = e.id;
+        document.querySelector('#empNo').value = e.emp_no;
+        document.querySelector('#empName').value = e.name;
+        document.querySelector('#placeQ').value = (e.place_title||'');
+        // load search options around title then select
+        searchPlaces(e.place_title || e.drop_place_id).then(()=>{
+          document.querySelector('#placeSel').value = e.drop_place_id;
+        });
+      });
+    });
+  }
+
+  document.querySelector('#empTable').addEventListener('click', async (e)=>{
+    const d = e.target.dataset.del;
+    if(!d) return;
+    try{
+      await api.del(`/hod/employees/${d}`);
+      toast('🗑️ Deleted');
+      loadEmployees();
+    }catch(err){ toast('❌ '+err.message,'err'); }
+  });
+
+  document.querySelector('#saveEmp').addEventListener('click', async ()=>{
+    try{
+      const body = {
+        emp_no: document.querySelector('#empNo').value.trim(),
+        name: document.querySelector('#empName').value.trim(),
+        drop_place_id: document.querySelector('#placeSel').value
+      };
+      if(!body.drop_place_id) throw new Error('Drop place select කරන්න');
+      if(selectedEmpId){
+        await api.put(`/hod/employees/${selectedEmpId}`, body);
+      } else {
+        await api.post('/hod/employees', body);
+      }
+      toast('✅ Saved');
+      selectedEmpId = null;
+      document.querySelector('#empNo').value='';
+      document.querySelector('#empName').value='';
+      document.querySelector('#placeQ').value='';
+      document.querySelector('#placeSel').innerHTML='';
+      loadEmployees();
+    }catch(err){ toast('❌ '+err.message,'err'); }
+  });
+
+  document.querySelector('#clearEmp').addEventListener('click', ()=>{
+    selectedEmpId=null;
+    document.querySelector('#empNo').value='';
+    document.querySelector('#empName').value='';
+    document.querySelector('#placeQ').value='';
+    document.querySelector('#placeSel').innerHTML='';
+  });
+
+  async function loadRequests(){
+    const rows = await api.get('/hod/requests');
+    const t = document.querySelector('#reqTable');
+    t.innerHTML = `
+      <tr><th>Date</th><th>Time</th><th>Status</th></tr>
+      ${rows.map(r=>`<tr><td>${r.request_date}</td><td>${r.request_time}</td><td>${r.status}</td></tr>`).join('')}
+    `;
+  }
+
+  document.querySelector('#submitReq').addEventListener('click', async ()=>{
+    try{
+      const rDate = document.querySelector('#rDate').value;
+      const rTime = document.querySelector('#rTime').value;
+      const opts = [...document.querySelector('#empMulti').selectedOptions].map(o=>Number(o.value));
+      if(!rDate||!rTime||!opts.length) throw new Error('Date/Time/Employees අනිවාර්යයි');
+      await api.post('/hod/requests', { request_date: rDate, request_time: rTime, employee_ids: opts });
+      toast('✅ SUBMITTED');
+      loadRequests();
+    }catch(err){ toast('❌ '+err.message,'err'); }
+  });
+
+  // init
+  await loadEmployees();
+  await loadRequests();
+</script>
+</body>
+</html>

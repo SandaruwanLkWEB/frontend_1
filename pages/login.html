@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="si">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Login - DSI Transport</title>
+  <link rel="stylesheet" href="../assets/styles.css" />
+</head>
+<body>
+  <div id="top"></div>
+  <div class="container">
+    <div class="card">
+      <div class="row">
+        <div class="col-6">
+          <h2 style="margin-top:0">🔐 ලොගින්</h2>
+          <p style="color:var(--muted);margin-top:-6px">JWT (Bearer Token) භාවිතා කරයි</p>
+          <div class="row">
+            <div class="col-12">
+              <label>ඊමේල්</label>
+              <input id="email" placeholder="example@dsi.lk" />
+            </div>
+            <div class="col-12">
+              <label>මුරපදය</label>
+              <input id="password" type="password" placeholder="••••••••" />
+            </div>
+            <div class="col-12" style="display:flex;gap:10px;align-items:center">
+              <button class="btn primary" id="loginBtn">Login</button>
+              <a href="./register.html">EMP Register</a>
+            </div>
+          </div>
+        </div>
+        <div class="col-6">
+          <div class="kpi">
+            <div class="v">Places-Only v4</div>
+            <div class="l">Google API භාවිතා නොවේ • Place selection DB මත පමණි</div>
+          </div>
+          <div style="height:10px"></div>
+          <div class="kpi">
+            <div class="v">Workflows</div>
+            <div class="l">HOD → ADMIN → TA → HR</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { mountTopbar } from '../js/layout.js';
+    import { toast } from '../js/ui.js';
+    import { login, roleHome } from '../js/auth.js';
+
+    mountTopbar({ root: document.querySelector('#top'), title: 'DSI Transport System' });
+
+    document.querySelector('#loginBtn').addEventListener('click', async ()=>{
+      try{
+        const email = document.querySelector('#email').value.trim();
+        const password = document.querySelector('#password').value;
+        const j = await login(email,password);
+        toast('✅ Login OK');
+        location.href = '../' + roleHome(j.user.role);
+      }catch(e){
+        toast('❌ ' + e.message, 'err');
+      }
+    });
+  </script>
+</body>
+</html>

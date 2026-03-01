@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="si">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ADMIN Dashboard - DSI Transport</title>
+  <link rel="stylesheet" href="../assets/styles.css" />
+</head>
+<body>
+  <div id="top"></div>
+  <div class="container">
+
+    <div class="card">
+      <div class="kpis">
+        <div class="kpi"><div class="v" id="kDept">0</div><div class="l">Total Departments</div></div>
+        <div class="kpi"><div class="v" id="kVeh">0</div><div class="l">Total Vehicles</div></div>
+        <div class="kpi"><div class="v" id="kReq">0</div><div class="l">SUBMITTED Requests</div></div>
+        <div class="kpi"><div class="v">Places-Only</div><div class="l">No Routes/Sub-routes</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="tabs" id="tabs">
+        <button class="tab active" data-tab="dept">🏢 Departments</button>
+        <button class="tab" data-tab="veh">🚌 Vehicles</button>
+        <button class="tab" data-tab="appr">✅ Approvals</button>
+        <button class="tab" data-tab="import">📥 Data Import</button>
+      </div>
+
+      <div data-panel="dept">
+        <div class="row">
+          <div class="col-6">
+            <label>New Department Name</label>
+            <input id="deptName" placeholder="Colombo" />
+          </div>
+          <div class="col-6" style="display:flex;align-items:end;gap:10px">
+            <button class="btn primary" id="addDeptBtn">Add / Upsert</button>
+          </div>
+        </div>
+        <div style="height:12px"></div>
+        <table class="table" id="deptTable"></table>
+      </div>
+
+      <div data-panel="veh" style="display:none">
+        <div class="row">
+          <div class="col-3"><label>Vehicle No</label><input id="vNo" placeholder="NC-1234" /></div>
+          <div class="col-3"><label>Type</label>
+            <select id="vType"><option value="BUS">BUS</option><option value="VAN">VAN</option></select>
+          </div>
+          <div class="col-3"><label>Capacity</label><input id="vCap" type="number" placeholder="52" /></div>
+          <div class="col-3"><label>Active</label>
+            <select id="vActive"><option value="true">Yes</option><option value="false">No</option></select>
+          </div>
+          <div class="col-6"><label>Driver Name</label><input id="dName" placeholder="Driver" /></div>
+          <div class="col-6"><label>Driver Phone</label><input id="dPhone" placeholder="077xxxxxxx" /></div>
+          <div class="col-12" style="display:flex;gap:10px">
+            <button class="btn primary" id="saveVehBtn">Save / Upsert</button>
+          </div>
+        </div>
+        <div style="height:12px"></div>
+        <table class="table" id="vehTable"></table>
+      </div>
+
+      <div data-panel="appr" style="display:none">
+        <p style="color:var(--muted)">HOD submit කරපු requests මෙහි දි ADMIN_APPROVED කරයි.</p>
+        <table class="table" id="reqTable"></table>
+      </div>
+
+      <div data-panel="import" style="display:none">
+        <h3 style="margin-top:0">📥 Data Import (Mobile)</h3>
+        <div class="row">
+          <div class="col-6">
+            <label>Places JSON Upload</label>
+            <input id="placesFile" type="file" accept=".json" />
+            <div style="height:8px"></div>
+            <button class="btn primary" id="upPlaces">Upload Places</button>
+          </div>
+          <div class="col-6">
+            <label>GN CSV/JSON Upload</label>
+            <input id="gnFile" type="file" accept=".csv,.json" />
+            <div style="height:8px"></div>
+            <button class="btn primary" id="upGn">Upload GN</button>
+          </div>
+        </div>
+        <div style="height:12px"></div>
+        <pre id="importOut" style="white-space:pre-wrap;color:var(--muted)"></pre>
+      </div>
+
+    </div>
+  </div>
+
+<script type="module">
+  import { mountTopbar } from '../js/layout.js';
+  import { toast, setActiveTab } from '../js/ui.js';
+  import { requireLogin } from '../js/auth.js';
+  import { api } from '../js/api.js';
+
+  mountTopbar({ root: document.querySelector('#top'), title: 'ADMIN Dashboard' });
+  const ctx = requireLogin();
+  if(ctx.user.role!=='ADMIN' && ctx.user.role!=='HR'){
+    toast('Forbidden','err');
+    location.href = '../index.html';
+  }
+
+  const tabs = document.querySelector('#tabs');
+  tabs.addEventListener('click', (e)=>{
+    const b = e.target.closest('[data-tab]');
+    if(!b) return;
+    setActiveTab(tabs, b.dataset.tab);
+  });
+
+  async function loadDepts(){
+    const rows = await api.get('/admin/departments');
+    document.querySelector('#kDept').textContent = rows.length;
+    const t = document.querySelector('#deptTable');
+    t.innerHTML = `
+      <tr><th>ID</th><th>Name</th><th></th></tr>
+      ${rows.map(d=>`<tr>
+        <td>${d.id}</td>
+        <td><input data-id="${d.id}" value="${d.name}"/></td>
+        <td style="display:flex;gap:8px">
+          <button class="btn" data-save="${d.id}">Save</button>
+          <button class="btn danger" data-del="${d.id}">Delete</button>
+        </td>
+      </tr>`).join('')}
+    `;
+  }
+
+  document.querySelector('#addDeptBtn').addEventListener('click', async ()=>{
+    try{
+      const name = document.querySelector('#deptName').value.trim();
+      await api.post('/admin/departments', { name });
+      toast('✅ Saved');
+      document.querySelector('#deptName').value='';
+      loadDepts();
+    }catch(e){ toast('❌ '+e.message,'err'); }
+  });
+
+  document.querySelector('#deptTable').addEventListener('click', async (e)=>{
+    const s = e.target.dataset.save;
+    const d = e.target.dataset.del;
+    try{
+      if(s){
+        const inp = document.querySelector(`#deptTable input[data-id="${s}"]`);
+        await api.put(`/admin/departments/${s}`, { name: inp.value.trim() });
+        toast('✅ Updated');
+        loadDepts();
+      }
+      if(d){
+        await api.del(`/admin/departments/${d}`);
+        toast('🗑️ Deleted');
+        loadDepts();
+      }
+    }catch(err){ toast('❌ '+err.message,'err'); }
+  });
+
+  async function loadVehicles(){
+    const rows = await api.get('/admin/vehicles');
+    document.querySelector('#kVeh').textContent = rows.length;
+    const t = document.querySelector('#vehTable');
+    t.innerHTML = `
+      <tr><th>No</th><th>Type</th><th>Cap</th><th>Driver</th><th>Phone</th><th>Active</th><th></th></tr>
+      ${rows.map(v=>`<tr>
+        <td>${v.vehicle_no}</td>
+        <td>${v.vehicle_type}</td>
+        <td>${v.capacity}</td>
+        <td>${v.driver_name}</td>
+        <td>${v.driver_phone}</td>
+        <td>${v.active?'Yes':'No'}</td>
+        <td><button class="btn" data-fill='${JSON.stringify(v).replace(/'/g,'&apos;')}'>Edit</button></td>
+      </tr>`).join('')}
+    `;
+
+    t.querySelectorAll('[data-fill]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const v = JSON.parse(btn.dataset.fill);
+        document.querySelector('#vNo').value = v.vehicle_no;
+        document.querySelector('#vType').value = v.vehicle_type;
+        document.querySelector('#vCap').value = v.capacity;
+        document.querySelector('#dName').value = v.driver_name;
+        document.querySelector('#dPhone').value = v.driver_phone;
+        document.querySelector('#vActive').value = String(v.active);
+      });
+    });
+  }
+
+  document.querySelector('#saveVehBtn').addEventListener('click', async ()=>{
+    try{
+      const body = {
+        vehicle_no: document.querySelector('#vNo').value.trim(),
+        vehicle_type: document.querySelector('#vType').value,
+        capacity: Number(document.querySelector('#vCap').value),
+        driver_name: document.querySelector('#dName').value.trim(),
+        driver_phone: document.querySelector('#dPhone').value.trim(),
+        active: document.querySelector('#vActive').value === 'true'
+      };
+      await api.post('/admin/vehicles', body);
+      toast('✅ Vehicle saved');
+      loadVehicles();
+    }catch(e){ toast('❌ '+e.message,'err'); }
+  });
+
+  async function loadApprovals(){
+    const rows = await api.get('/admin/requests/submitted');
+    document.querySelector('#kReq').textContent = rows.length;
+    const t = document.querySelector('#reqTable');
+    t.innerHTML = `
+      <tr><th>Date</th><th>Time</th><th>Department</th><th>Status</th><th></th></tr>
+      ${rows.map(r=>`<tr>
+        <td>${r.request_date}</td>
+        <td>${r.request_time}</td>
+        <td>${r.department_name}</td>
+        <td>${r.status}</td>
+        <td><button class="btn primary" data-appr="${r.id}">Approve</button></td>
+      </tr>`).join('')}
+    `;
+  }
+
+  document.querySelector('#reqTable').addEventListener('click', async (e)=>{
+    const id = e.target.dataset.appr;
+    if(!id) return;
+    try{
+      await api.post(`/admin/requests/${id}/approve`, {});
+      toast('✅ ADMIN_APPROVED');
+      loadApprovals();
+    }catch(err){ toast('❌ '+err.message,'err'); }
+  });
+
+  document.querySelector('#upPlaces').addEventListener('click', async ()=>{
+    try{
+      const f = document.querySelector('#placesFile').files[0];
+      if(!f) return toast('File select කරන්න','err');
+      const out = await api.upload('/admin/import/places', f);
+      document.querySelector('#importOut').textContent = JSON.stringify(out,null,2);
+      toast('✅ Places imported');
+    }catch(e){ toast('❌ '+e.message,'err'); }
+  });
+  document.querySelector('#upGn').addEventListener('click', async ()=>{
+    try{
+      const f = document.querySelector('#gnFile').files[0];
+      if(!f) return toast('File select කරන්න','err');
+      const out = await api.upload('/admin/import/gn', f);
+      document.querySelector('#importOut').textContent = JSON.stringify(out,null,2);
+      toast('✅ GN imported');
+    }catch(e){ toast('❌ '+e.message,'err'); }
+  });
+
+  // init
+  await loadDepts();
+  await loadVehicles();
+  await loadApprovals();
+</script>
+</body>
+</html>

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="si">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>EMP - Today Transport</title>
+  <link rel="stylesheet" href="../assets/styles.css" />
+</head>
+<body>
+  <div id="top"></div>
+  <div class="container">
+    <div class="card">
+      <h2 style="margin-top:0">🚌 අද Transport Details</h2>
+      <div id="box" style="color:var(--muted)"></div>
+    </div>
+  </div>
+
+<script type="module">
+  import { mountTopbar } from '../js/layout.js';
+  import { toast } from '../js/ui.js';
+  import { requireLogin } from '../js/auth.js';
+  import { api } from '../js/api.js';
+
+  mountTopbar({ root: document.querySelector('#top'), title: 'EMP Dashboard' });
+  const ctx = requireLogin();
+  if(ctx.user.role!=='EMP'){
+    toast('Forbidden','err');
+    location.href='../index.html';
+  }
+
+  try{
+    const out = await api.get('/emp/today');
+    const b = document.querySelector('#box');
+    if(!out.today){
+      b.innerHTML = `<div class="kpi"><div class="v">No request today</div><div class="l">අද දිනය සඳහා request එකක් නැහැ</div></div>`;
+    } else {
+      const a = out.assignment;
+      b.innerHTML = `
+        <div class="row">
+          <div class="col-6"><div class="kpi"><div class="v">${out.employee.emp_no} ${out.employee.name}</div><div class="l">Place: ${out.employee.place_title||''}</div></div></div>
+          <div class="col-6"><div class="kpi"><div class="v">${out.today.request_date} ${out.today.request_time}</div><div class="l">Status: ${out.today.status}</div></div></div>
+          <div class="col-12"><div style="height:10px"></div></div>
+          <div class="col-12"><div class="kpi">
+            <div class="v">${a?.vehicle_no || 'Unassigned'}</div>
+            <div class="l">Driver: ${a?.driver_name||'-'} • Phone: ${a?.driver_phone||'-'} • Capacity: ${a?.capacity||'-'}</div>
+          </div></div>
+        </div>
+      `;
+    }
+  }catch(e){ toast('❌ '+e.message,'err'); }
+</script>
+</body>
+</html>

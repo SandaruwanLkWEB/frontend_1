@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="si">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>EMP Register - DSI Transport</title>
+  <link rel="stylesheet" href="../assets/styles.css" />
+</head>
+<body>
+  <div id="top"></div>
+  <div class="container">
+    <div class="card">
+      <h2 style="margin-top:0">🧑‍💼 EMP Register</h2>
+      <p style="color:var(--muted);margin-top:-8px">Registration වෙද්දී Drop Place එක අනිවාර්යයි (DB Places table මත පමණි)</p>
+
+      <div class="row">
+        <div class="col-6">
+          <label>EMP No</label>
+          <input id="empNo" placeholder="EMP001" />
+        </div>
+        <div class="col-6">
+          <label>නම</label>
+          <input id="name" placeholder="සම්පූර්ණ නම" />
+        </div>
+        <div class="col-6">
+          <label>ඊමේල්</label>
+          <input id="email" placeholder="example@dsi.lk" />
+        </div>
+        <div class="col-6">
+          <label>මුරපදය</label>
+          <input id="password" type="password" placeholder="••••••••" />
+        </div>
+        <div class="col-6">
+          <label>Department</label>
+          <select id="dept"></select>
+        </div>
+        <div class="col-6">
+          <label>Drop Place Search</label>
+          <input id="placeQ" placeholder="Place title / address" />
+          <div style="height:8px"></div>
+          <select id="placeSel"></select>
+          <small style="color:var(--muted)">Place එකක් නැත්නම් Admin/HR විසින් “📥 Data Import” මගින් Places upload කරන්න.</small>
+        </div>
+        <div class="col-12" style="display:flex;gap:10px;align-items:center;margin-top:10px">
+          <button class="btn primary" id="regBtn">Register & Login</button>
+          <a href="./login.html">Back to Login</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script type="module">
+  import { mountTopbar } from '../js/layout.js';
+  import { toast } from '../js/ui.js';
+  import { registerEmp, roleHome } from '../js/auth.js';
+  import { API_BASE } from '../js/config.js';
+
+  mountTopbar({ root: document.querySelector('#top'), title: 'DSI Transport System' });
+
+  async function loadDepts(){
+    const r = await fetch(`${API_BASE}/auth/departments`);
+    const j = await r.json();
+    const sel = document.querySelector('#dept');
+    sel.innerHTML = j.map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
+  }
+
+  let placeTimer;
+  async function searchPlaces(q){
+    const r = await fetch(`${API_BASE}/auth/places/search?q=${encodeURIComponent(q)}`);
+    const j = await r.json();
+    const sel = document.querySelector('#placeSel');
+    sel.innerHTML = j.map(p=>`<option value="${p.place_id}">${p.title} — ${p.address||''}</option>`).join('');
+  }
+
+  document.querySelector('#placeQ').addEventListener('input', (e)=>{
+    const q = e.target.value.trim();
+    clearTimeout(placeTimer);
+    placeTimer = setTimeout(()=>{ if(q.length>=2) searchPlaces(q); }, 300);
+  });
+
+  document.querySelector('#regBtn').addEventListener('click', async ()=>{
+    try{
+      const payload = {
+        emp_no: document.querySelector('#empNo').value.trim(),
+        name: document.querySelector('#name').value.trim(),
+        email: document.querySelector('#email').value.trim(),
+        password: document.querySelector('#password').value,
+        department_id: Number(document.querySelector('#dept').value),
+        drop_place_id: document.querySelector('#placeSel').value
+      };
+      const j = await registerEmp(payload);
+      toast('✅ Register OK');
+      location.href = '../' + roleHome(j.user.role);
+    }catch(e){ toast('❌ ' + e.message,'err'); }
+  });
+
+  loadDepts().catch(()=>toast('Departments load failed','err'));
+</script>
+</body>
+</html>

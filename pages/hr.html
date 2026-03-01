@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="si">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>HR Dashboard - DSI Transport</title>
+  <link rel="stylesheet" href="../assets/styles.css" />
+</head>
+<body>
+  <div id="top"></div>
+  <div class="container">
+
+    <div class="card">
+      <div class="tabs" id="tabs">
+        <button class="tab active" data-tab="appr">✅ Final Approvals</button>
+        <button class="tab" data-tab="dept">🏢 Departments</button>
+        <button class="tab" data-tab="rep">📥 Reports / Imports</button>
+      </div>
+
+      <div data-panel="appr">
+        <table class="table" id="reqTable"></table>
+      </div>
+
+      <div data-panel="dept" style="display:none">
+        <div class="row">
+          <div class="col-6">
+            <label>Departments</label>
+            <select id="deptSel" size="10" style="height:260px"></select>
+          </div>
+          <div class="col-6">
+            <label>CSV Download (Multi Select Departments)</label>
+            <select id="deptMulti" multiple size="10" style="height:260px"></select>
+            <div style="height:8px"></div>
+            <button class="btn primary" id="csvBtn">Download CSV</button>
+          </div>
+          <div class="col-12">
+            <h3 style="margin-bottom:6px">Members</h3>
+            <table class="table" id="memTable"></table>
+          </div>
+        </div>
+      </div>
+
+      <div data-panel="rep" style="display:none">
+        <h3 style="margin-top:0">📥 Data Import (Places + GN)</h3>
+        <div class="row">
+          <div class="col-6">
+            <label>Places JSON Upload</label>
+            <input id="placesFile" type="file" accept=".json" />
+            <div style="height:8px"></div>
+            <button class="btn primary" id="upPlaces">Upload Places</button>
+          </div>
+          <div class="col-6">
+            <label>GN CSV/JSON Upload</label>
+            <input id="gnFile" type="file" accept=".csv,.json" />
+            <div style="height:8px"></div>
+            <button class="btn primary" id="upGn">Upload GN</button>
+          </div>
+        </div>
+        <div style="height:12px"></div>
+        <pre id="importOut" style="white-space:pre-wrap;color:var(--muted)"></pre>
+      </div>
+
+    </div>
+  </div>
+
+<script type="module">
+  import { mountTopbar } from '../js/layout.js';
+  import { toast, setActiveTab } from '../js/ui.js';
+  import { requireLogin } from '../js/auth.js';
+  import { api } from '../js/api.js';
+  import { API_BASE } from '../js/config.js';
+
+  mountTopbar({ root: document.querySelector('#top'), title: 'HR Dashboard' });
+  const ctx = requireLogin();
+  if(ctx.user.role!=='HR'){
+    toast('Forbidden','err');
+    location.href='../index.html';
+  }
+
+  const tabs = document.querySelector('#tabs');
+  tabs.addEventListener('click', (e)=>{
+    const b = e.target.closest('[data-tab]');
+    if(!b) return;
+    setActiveTab(tabs, b.dataset.tab);
+  });
+
+  async function loadRequests(){
+    const rows = await api.get('/hr/requests');
+    const t = document.querySelector('#reqTable');
+    t.innerHTML = `
+      <tr><th>Date</th><th>Time</th><th>Department</th><th>Status</th><th></th></tr>
+      ${rows.map(r=>`<tr>
+        <td>${r.request_date}</td><td>${r.request_time}</td><td>${r.department_name}</td><td>${r.status}</td>
+        <td>${r.status==='TA_ASSIGNED'?`<button class="btn primary" data-appr="${r.id}">Final Approve</button>`:'-'}</td>
+      </tr>`).join('')}
+    `;
+  }
+
+  document.querySelector('#reqTable').addEventListener('click', async (e)=>{
+    const id = e.target.dataset.appr;
+    if(!id) return;
+    try{
+      await api.post(`/hr/requests/${id}/final-approve`, {});
+      toast('✅ HR_FINAL_APPROVED');
+      loadRequests();
+    }catch(err){ toast('❌ '+err.message,'err'); }
+  });
+
+  async function loadDepartments(){
+    const rows = await api.get('/hr/departments');
+    const sel = document.querySelector('#deptSel');
+    const mul = document.querySelector('#deptMulti');
+    sel.innerHTML = rows.map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
+    mul.innerHTML = rows.map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
+    if(rows[0]){ sel.value = rows[0].id; await loadMembers(rows[0].id); }
+  }
+
+  async function loadMembers(deptId){
+    const rows = await api.get(`/hr/departments/${deptId}/members`);
+    const t = document.querySelector('#memTable');
+    t.innerHTML = `
+      <tr><th>Emp No</th><th>Name</th><th>Place</th><th>Address</th><th>Lat</th><th>Lng</th></tr>
+      ${rows.map(r=>`<tr>
+        <td>${r.emp_no}</td><td>${r.name}</td><td>${r.place_title||''}</td><td>${r.address||''}</td><td>${r.lat??''}</td><td>${r.lng??''}</td>
+      </tr>`).join('')}
+    `;
+  }
+
+  document.querySelector('#deptSel').addEventListener('change', (e)=>loadMembers(e.target.value));
+
+  document.querySelector('#csvBtn').addEventListener('click', async ()=>{
+    try{
+      const ids = [...document.querySelector('#deptMulti').selectedOptions].map(o=>Number(o.value));
+      if(!ids.length) throw new Error('Select departments');
+      // Use fetch to download
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_BASE}/hr/departments/csv`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
+        body: JSON.stringify({ department_ids: ids })
+      });
+      if(!res.ok){
+        const j = await res.json().catch(()=>({}));
+        throw new Error(j.error||'CSV failed');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'departments.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+      toast('✅ Downloaded');
+    }catch(e){ toast('❌ '+e.message,'err'); }
+  });
+
+  document.querySelector('#upPlaces').addEventListener('click', async ()=>{
+    try{
+      const f = document.querySelector('#placesFile').files[0];
+      if(!f) return toast('File select කරන්න','err');
+      const out = await api.upload('/admin/import/places', f);
+      document.querySelector('#importOut').textContent = JSON.stringify(out,null,2);
+      toast('✅ Places imported');
+    }catch(e){ toast('❌ '+e.message,'err'); }
+  });
+  document.querySelector('#upGn').addEventListener('click', async ()=>{
+    try{
+      const f = document.querySelector('#gnFile').files[0];
+      if(!f) return toast('File select කරන්න','err');
+      const out = await api.upload('/admin/import/gn', f);
+      document.querySelector('#importOut').textContent = JSON.stringify(out,null,2);
+      toast('✅ GN imported');
+    }catch(e){ toast('❌ '+e.message,'err'); }
+  });
+
+  await loadRequests();
+  await loadDepartments();
+</script>
+</body>
+</html>

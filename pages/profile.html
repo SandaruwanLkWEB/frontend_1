@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="si">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Profile - DSI Transport</title>
+  <link rel="stylesheet" href="../assets/styles.css" />
+</head>
+<body>
+  <div id="top"></div>
+  <div class="container">
+    <div class="card">
+      <h2 style="margin-top:0">👤 Profile</h2>
+      <div id="info" style="color:var(--muted)"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { mountTopbar } from '../js/layout.js';
+    import { requireLogin } from '../js/auth.js';
+
+    mountTopbar({ root: document.querySelector('#top'), title: 'DSI Transport System' });
+    const ctx = requireLogin();
+    const u = ctx?.user;
+    if(u){
+      document.querySelector('#info').innerHTML = `
+        <div class="row">
+          <div class="col-6"><label>Email</label><input value="${u.email}" disabled/></div>
+          <div class="col-3"><label>Role</label><input value="${u.role}" disabled/></div>
+          <div class="col-3"><label>Department ID</label><input value="${u.department_id ?? ''}" disabled/></div>
+        </div>
+      `;
+    }
+  </script>
+</body>
+</html>
