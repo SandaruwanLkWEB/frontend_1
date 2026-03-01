@@ -18,10 +18,6 @@
       </div>
 
       <div data-panel="appr">
-        <h3 style="margin-top:0">🗓️ Daily Batches (TA → HR)</h3>
-        <table class="table" id="batchTable"></table>
-        <div style="height:14px"></div>
-        <h3 style="margin-top:0">Requests (Legacy)</h3>
         <table class="table" id="reqTable"></table>
       </div>
 
@@ -62,6 +58,26 @@
         </div>
         <div style="height:12px"></div>
         <pre id="importOut" style="white-space:pre-wrap;color:var(--muted)"></pre>
+
+        <hr style="border:none;border-top:1px solid rgba(255,255,255,.12);margin:18px 0" />
+        <h3 style="margin-top:0">📄 Daily Reports (HR Final Approve පස්සේ)</h3>
+        <div class="row">
+          <div class="col-4">
+            <label>Report Date</label>
+            <input id="repDate" type="date" />
+          </div>
+          <div class="col-8">
+            <label>Downloads</label>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn primary" id="dlSticker">Vehicle Sticker Pack (PDF)</button>
+              <button class="btn" id="dlGroup">Group-wise (PDF)</button>
+              <button class="btn" id="dlSide">Side-wise (PDF)</button>
+              <button class="btn" id="dlCsv">Master CSV</button>
+            </div>
+            <div style="height:6px"></div>
+            <div class="hint">* Reports download වෙන්නේ HR_FINAL_APPROVED උනාට පස්සෙ විතරයි.</div>
+          </div>
+        </div>
       </div>
 
     </div>
@@ -99,29 +115,6 @@
       </tr>`).join('')}
     `;
   }
-
-  async function loadBatches(){
-    const rows = await api.get('/hr/batches');
-    const t = document.querySelector('#batchTable');
-    t.innerHTML = `
-      <tr><th>Date</th><th>Status</th><th></th></tr>
-      ${rows.map(b=>`<tr>
-        <td>${b.batch_date}</td>
-        <td>${b.status}</td>
-        <td>${b.status==='TA_SUBMITTED'?`<button class="btn primary" data-bappr="${b.id}">Final Approve</button>`:'-'}</td>
-      </tr>`).join('')}
-    `;
-  }
-
-  document.querySelector('#batchTable').addEventListener('click', async (e)=>{
-    const id = e.target.dataset.bappr;
-    if(!id) return;
-    try{
-      await api.post(`/hr/batches/${id}/final-approve`, {});
-      toast('✅ Batch HR_FINAL_APPROVED');
-      await loadBatches();
-    }catch(err){ toast('❌ '+err.message,'err'); }
-  });
 
   document.querySelector('#reqTable').addEventListener('click', async (e)=>{
     const id = e.target.dataset.appr;
@@ -200,7 +193,47 @@
     }catch(e){ toast('❌ '+e.message,'err'); }
   });
 
-  await loadBatches();
+  // Reports downloads
+  const today = new Date();
+  const pad = (n)=>String(n).padStart(2,'0');
+  const ymd = `${today.getFullYear()}-${pad(today.getMonth()+1)}-${pad(today.getDate())}`;
+  document.querySelector('#repDate').value = ymd;
+
+  async function downloadReport(path, filename){
+    const token = localStorage.getItem('token');
+    const date = document.querySelector('#repDate').value;
+    if(!date) throw new Error('Date select කරන්න');
+    const res = await fetch(`${API_BASE}${path.replace(':date', date)}`,{ headers:{'Authorization':`Bearer ${token}`}});
+    if(!res.ok){
+      const j = await res.json().catch(()=>({}));
+      throw new Error(j.error||'Download failed');
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename.replace(':date', date);
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  document.querySelector('#dlSticker').addEventListener('click', async ()=>{
+    try{ await downloadReport('/reports/daily/:date/vehicle-sticker.pdf', 'DSI_Transport_:date_VehicleSticker.pdf'); toast('✅ Download started'); }
+    catch(e){ toast('❌ '+e.message,'err'); }
+  });
+  document.querySelector('#dlGroup').addEventListener('click', async ()=>{
+    try{ await downloadReport('/reports/daily/:date/group-wise.pdf', 'DSI_Transport_:date_GroupWise.pdf'); toast('✅ Download started'); }
+    catch(e){ toast('❌ '+e.message,'err'); }
+  });
+  document.querySelector('#dlSide').addEventListener('click', async ()=>{
+    try{ await downloadReport('/reports/daily/:date/side-wise.pdf', 'DSI_Transport_:date_SideWise.pdf'); toast('✅ Download started'); }
+    catch(e){ toast('❌ '+e.message,'err'); }
+  });
+  document.querySelector('#dlCsv').addEventListener('click', async ()=>{
+    try{ await downloadReport('/reports/daily/:date/master.csv', 'DSI_Transport_:date_Master.csv'); toast('✅ Download started'); }
+    catch(e){ toast('❌ '+e.message,'err'); }
+  });
+
   await loadRequests();
   await loadDepartments();
 </script>
