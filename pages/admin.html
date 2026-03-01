@@ -62,7 +62,20 @@
       </div>
 
       <div data-panel="appr" style="display:none">
-        <p style="color:var(--muted)">HOD submit කරපු requests මෙහි දි ADMIN_APPROVED කරයි.</p>
+        <p style="color:var(--muted)">HOD submit කරපු requests මෙහි දි ADMIN_APPROVED කරයි. දවස lock කළාම (All Departments) system එක auto-group කරලා TA ට route counts පෙන්වයි.</p>
+
+        <div class="row">
+          <div class="col-4">
+            <label>Batch Date</label>
+            <input id="lockDate" type="date" />
+          </div>
+          <div class="col-8" style="display:flex;gap:10px;align-items:end;justify-content:flex-end">
+            <button class="btn" id="lockPreview">🧠 Auto-Group Preview</button>
+            <button class="btn primary" id="lockDay">🔒 Approve + Lock Day</button>
+          </div>
+          <div class="col-12"><pre id="lockOut" style="white-space:pre-wrap;color:var(--muted)"></pre></div>
+        </div>
+        <div style="height:12px"></div>
         <table class="table" id="reqTable"></table>
       </div>
 
@@ -84,25 +97,6 @@
         </div>
         <div style="height:12px"></div>
         <pre id="importOut" style="white-space:pre-wrap;color:var(--muted)"></pre>
-
-        <div style="height:18px"></div>
-        <div class="card" id="devSeedCard" style="display:none">
-          <h3 style="margin-top:0">🧪 DEV Seed (Test Data)</h3>
-          <p style="color:var(--muted);margin-top:0">
-            මෙක DEV test සඳහා විතරයි. DB එක සම්පූර්ණයෙන් wipe කරලා (tables reset) 10 Departments + 250 Employees + 20 Vehicles + අද දවසට SUBMITTED Requests seed කරයි.
-          </p>
-          <div class="row">
-            <div class="col-6">
-              <label>Seed Date (optional)</label>
-              <input id="seedDate" placeholder="YYYY-MM-DD (empty = අද)" />
-            </div>
-            <div class="col-6" style="display:flex;align-items:end;gap:10px">
-              <button class="btn danger" id="reseedBtn">⚠️ Reset & Seed Now</button>
-            </div>
-          </div>
-          <div style="height:10px"></div>
-          <pre id="seedOut" style="white-space:pre-wrap;color:var(--muted)"></pre>
-        </div>
       </div>
 
     </div>
@@ -245,6 +239,40 @@
     }catch(err){ toast('❌ '+err.message,'err'); }
   });
 
+  // Daily Lock + Auto-group
+  const lockDate = document.querySelector('#lockDate');
+  if (lockDate) {
+    const today = new Date();
+    const iso = new Date(today.getTime() - (today.getTimezoneOffset()*60000)).toISOString().slice(0,10);
+    lockDate.value = iso;
+  }
+
+  async function doLock(submit){
+    const date = lockDate.value;
+    if(!date) throw new Error('Date select කරන්න');
+    const body = {
+      date,
+      settings: {
+        SMALL_GROUP_SINGLE_VEHICLE_THRESHOLD: 18,
+        DIRECTION_GAP_THRESHOLD_DEG: 140,
+        BUS_OVERFLOW_ALLOW: 10,
+        VAN_OVERFLOW_ALLOW: 4
+      }
+    };
+    const out = await api.post('/admin/batches/lock', body);
+    document.querySelector('#lockOut').textContent = JSON.stringify(out,null,2);
+    if(submit) toast('✅ Day locked + auto-group ready for TA');
+    else toast('✅ Preview ready');
+    await loadApprovals();
+  }
+
+  document.querySelector('#lockPreview')?.addEventListener('click', async ()=>{
+    try{ await doLock(false); }catch(e){ toast('❌ '+e.message,'err'); }
+  });
+  document.querySelector('#lockDay')?.addEventListener('click', async ()=>{
+    try{ await doLock(true); }catch(e){ toast('❌ '+e.message,'err'); }
+  });
+
   document.querySelector('#upPlaces').addEventListener('click', async ()=>{
     try{
       const f = document.querySelector('#placesFile').files[0];
@@ -264,35 +292,10 @@
     }catch(e){ toast('❌ '+e.message,'err'); }
   });
 
-  // DEV seed (enabled only when backend env DEV_SEED_ENABLED=true)
-  async function initDevSeed(){
-    try{
-      const s = await api.get('/admin/dev/seed-enabled');
-      if(!s?.enabled) return;
-      const card = document.querySelector('#devSeedCard');
-      card.style.display = 'block';
-
-      document.querySelector('#reseedBtn').addEventListener('click', async ()=>{
-        if(!confirm('⚠️ DB එක wipe කරලා seed කරනවා. Continue?')) return;
-        try{
-          const date = document.querySelector('#seedDate').value.trim();
-          const body = date ? { date } : {};
-          const out = await api.post('/admin/dev/reseed', body);
-          document.querySelector('#seedOut').textContent = JSON.stringify(out,null,2);
-          toast('✅ Seed completed');
-          await loadDepts();
-          await loadVehicles();
-          await loadApprovals();
-        }catch(e){ toast('❌ '+e.message,'err'); }
-      });
-    }catch(e){ /* ignore */ }
-  }
-
   // init
   await loadDepts();
   await loadVehicles();
   await loadApprovals();
-  await initDevSeed();
 </script>
 </body>
 </html>

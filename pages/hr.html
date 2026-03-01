@@ -18,6 +18,10 @@
       </div>
 
       <div data-panel="appr">
+        <h3 style="margin-top:0">🗓️ Daily Batches (TA → HR)</h3>
+        <table class="table" id="batchTable"></table>
+        <div style="height:14px"></div>
+        <h3 style="margin-top:0">Requests (Legacy)</h3>
         <table class="table" id="reqTable"></table>
       </div>
 
@@ -96,6 +100,29 @@
     `;
   }
 
+  async function loadBatches(){
+    const rows = await api.get('/hr/batches');
+    const t = document.querySelector('#batchTable');
+    t.innerHTML = `
+      <tr><th>Date</th><th>Status</th><th></th></tr>
+      ${rows.map(b=>`<tr>
+        <td>${b.batch_date}</td>
+        <td>${b.status}</td>
+        <td>${b.status==='TA_SUBMITTED'?`<button class="btn primary" data-bappr="${b.id}">Final Approve</button>`:'-'}</td>
+      </tr>`).join('')}
+    `;
+  }
+
+  document.querySelector('#batchTable').addEventListener('click', async (e)=>{
+    const id = e.target.dataset.bappr;
+    if(!id) return;
+    try{
+      await api.post(`/hr/batches/${id}/final-approve`, {});
+      toast('✅ Batch HR_FINAL_APPROVED');
+      await loadBatches();
+    }catch(err){ toast('❌ '+err.message,'err'); }
+  });
+
   document.querySelector('#reqTable').addEventListener('click', async (e)=>{
     const id = e.target.dataset.appr;
     if(!id) return;
@@ -173,6 +200,7 @@
     }catch(e){ toast('❌ '+e.message,'err'); }
   });
 
+  await loadBatches();
   await loadRequests();
   await loadDepartments();
 </script>

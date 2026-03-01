@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>TA Dashboard - DSI Transport</title>
+  <title>TA Daily Plan - DSI Transport</title>
   <link rel="stylesheet" href="../assets/styles.css" />
 </head>
 <body>
@@ -12,222 +12,179 @@
 
     <div class="card">
       <div class="row">
-        <div class="col-6">
-          <label>Request Select</label>
-          <select id="reqSel"></select>
+        <div class="col-4">
+          <label>Batch Date</label>
+          <input id="date" type="date" />
         </div>
-        <div class="col-6" style="display:flex;gap:10px;align-items:end;justify-content:flex-end">
-          <button class="btn" id="pdfVeh">📄 Vehicle-wise PDF</button>
-          <button class="btn" id="pdfSide">📄 Side-wise PDF</button>
-        </div>
-      </div>
-      <div style="height:12px"></div>
-      <div class="tabs" id="tabs">
-        <button class="tab active" data-tab="smart">🌍 Smart Auto Assign</button>
-        <button class="tab" data-tab="manual">🛠️ Manual Override</button>
-      </div>
-
-      <div data-panel="smart">
-        <div class="row">
-          <div class="col-6">
-            <h3 style="margin:0">Vehicles</h3>
-            <div id="vehList" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px"></div>
-          </div>
-          <div class="col-6">
-            <h3 style="margin:0">Settings</h3>
-            <div class="row" style="margin-top:8px">
-              <div class="col-6"><label>SMALL_GROUP_SINGLE_VEHICLE_THRESHOLD</label><input id="sSmall" type="number" value="18"/></div>
-              <div class="col-6"><label>DIRECTION_GAP_THRESHOLD_DEG</label><input id="sGap" type="number" value="140"/></div>
-              <div class="col-6"><label>NEAR_KM_DEFAULT</label><input id="sNear" type="number" value="5"/></div>
-              <div class="col-6"><label>BUS_OVERFLOW_ALLOW</label><input id="sBus" type="number" value="10"/></div>
-              <div class="col-6"><label>VAN_OVERFLOW_ALLOW</label><input id="sVan" type="number" value="4"/></div>
-            </div>
-            <div style="display:flex;gap:10px;margin-top:10px">
-              <button class="btn" id="previewBtn">Preview</button>
-              <button class="btn primary" id="commitBtn">Confirm & Save</button>
-            </div>
-          </div>
-          <div class="col-12"><div style="height:12px"></div>
-            <h3 style="margin:0">Preview</h3>
-            <table class="table" id="previewTable"></table>
-            <div id="missingBox" style="color:var(--muted)"></div>
-          </div>
+        <div class="col-8" style="display:flex;gap:10px;align-items:end;justify-content:flex-end">
+          <button class="btn" id="reload">🔄 Load</button>
+          <button class="btn primary" id="submit">📨 Submit to HR</button>
         </div>
       </div>
-
-      <div data-panel="manual" style="display:none">
-        <p style="color:var(--muted)">Employee එකක් vehicle එකකට manually assign කරන්න. Vehicle uniqueness per day enforced.</p>
-        <table class="table" id="empTable"></table>
-      </div>
-
+      <div style="height:10px"></div>
+      <div id="status" style="color:var(--muted)"></div>
     </div>
+
+    <div class="card">
+      <div class="row">
+        <div class="col-12">
+          <h3 style="margin:0">🚍 Available Vehicles</h3>
+          <div style="color:var(--muted);font-size:13px">එක vehicle එකක් එකම route/group එකකට පමණක් select කරන්න පුළුවන්.</div>
+          <div id="vehList" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0">🧠 System Auto-Routes (Counts Only)</h3>
+      <div style="color:var(--muted);font-size:13px">Admin day lock වුන පස්සේ system එකම rules අනුව groups හදලා තියේ. මෙතන TA ට පෙන්වන්නේ route/group + pax + guidance විතරයි.</div>
+      <div style="height:10px"></div>
+      <div id="groups"></div>
+    </div>
+
   </div>
 
 <script type="module">
   import { mountTopbar } from '../js/layout.js';
-  import { toast, setActiveTab } from '../js/ui.js';
+  import { toast } from '../js/ui.js';
   import { requireLogin } from '../js/auth.js';
   import { api } from '../js/api.js';
-  import { API_BASE } from '../js/config.js';
 
-  mountTopbar({ root: document.querySelector('#top'), title: 'Transport Authority (TA)' });
+  mountTopbar({ root: document.querySelector('#top'), title: 'Transport Authority (TA) • Daily Plan' });
   const ctx = requireLogin();
   if(ctx.user.role!=='TA'){
     toast('Forbidden','err');
     location.href='../index.html';
   }
 
-  const tabs = document.querySelector('#tabs');
-  tabs.addEventListener('click', (e)=>{
-    const b = e.target.closest('[data-tab]');
-    if(!b) return;
-    setActiveTab(tabs, b.dataset.tab);
-  });
+  const dateEl = document.querySelector('#date');
+  const statusEl = document.querySelector('#status');
+  const vehList = document.querySelector('#vehList');
+  const groupsBox = document.querySelector('#groups');
+  const today = new Date();
+  dateEl.value = new Date(today.getTime() - (today.getTimezoneOffset()*60000)).toISOString().slice(0,10);
 
   let vehicles = [];
-  let currentRequest = null;
+  let batch = null;
+  let groups = [];
+  // selections: group_id -> Set(vehicle_id)
+  const selections = new Map();
 
-  function loadSettings(){
-    const s = JSON.parse(localStorage.getItem('ta_settings')||'null');
-    if(!s) return;
-    document.querySelector('#sSmall').value = s.SMALL_GROUP_SINGLE_VEHICLE_THRESHOLD ?? 18;
-    document.querySelector('#sGap').value = s.DIRECTION_GAP_THRESHOLD_DEG ?? 140;
-    document.querySelector('#sNear').value = s.NEAR_KM_DEFAULT ?? 5;
-    document.querySelector('#sBus').value = s.BUS_OVERFLOW_ALLOW ?? 10;
-    document.querySelector('#sVan').value = s.VAN_OVERFLOW_ALLOW ?? 4;
-  }
-  function saveSettings(){
-    const s = getSettings();
-    localStorage.setItem('ta_settings', JSON.stringify(s));
-  }
-  function getSettings(){
-    return {
-      SMALL_GROUP_SINGLE_VEHICLE_THRESHOLD: Number(document.querySelector('#sSmall').value),
-      DIRECTION_GAP_THRESHOLD_DEG: Number(document.querySelector('#sGap').value),
-      NEAR_KM_DEFAULT: Number(document.querySelector('#sNear').value),
-      BUS_OVERFLOW_ALLOW: Number(document.querySelector('#sBus').value),
-      VAN_OVERFLOW_ALLOW: Number(document.querySelector('#sVan').value)
-    };
-  }
-
-  async function loadVehicles(){
-    vehicles = await api.get('/lookup/vehicles');
-    const box = document.querySelector('#vehList');
-    box.innerHTML = vehicles.map(v=>`
-      <label style="display:flex;gap:8px;align-items:center;border:1px solid var(--stroke);padding:10px;border-radius:14px;background:rgba(255,255,255,.08)">
-        <input type="checkbox" class="vehChk" value="${v.id}" />
-        <div>
-          <div style="font-weight:800">${v.vehicle_no} <span style="color:var(--muted);font-weight:600">(${v.vehicle_type})</span></div>
-          <div style="color:var(--muted);font-size:12px">Cap ${v.capacity} • ${v.driver_name} • ${v.driver_phone}</div>
-        </div>
-      </label>
+  function renderVehicles(){
+    vehList.innerHTML = vehicles.map(v=>`
+      <div class="glass" style="border:1px solid var(--stroke);padding:10px;border-radius:14px;background:rgba(255,255,255,.06)">
+        <div style="font-weight:800">${v.vehicle_no} <span style="color:var(--muted);font-weight:600">(${v.vehicle_type})</span></div>
+        <div style="color:var(--muted);font-size:12px">Cap ${v.capacity} • ${v.driver_name} • ${v.driver_phone}</div>
+      </div>
     `).join('');
   }
 
-  async function loadRequests(){
-    const rows = await api.get('/ta/requests');
-    const sel = document.querySelector('#reqSel');
-    sel.innerHTML = rows.map(r=>`<option value="${r.id}">${r.request_date} ${r.request_time} • ${r.department_name} • ${r.status}</option>`).join('');
-    if(rows[0]){ sel.value = rows[0].id; await loadRequest(rows[0].id); }
-  }
-
-  async function loadRequest(id){
-    const data = await api.get(`/ta/requests/${id}`);
-    currentRequest = data;
-    renderManualTable();
-    document.querySelector('#previewTable').innerHTML = '';
-    document.querySelector('#missingBox').textContent = '';
-  }
-
-  document.querySelector('#reqSel').addEventListener('change', async (e)=>{
-    await loadRequest(e.target.value);
-  });
-
-  function selectedVehicleIds(){
-    return [...document.querySelectorAll('.vehChk:checked')].map(c=>Number(c.value));
-  }
-
-  function renderPreview(preview){
-    const t = document.querySelector('#previewTable');
-    t.innerHTML = `
-      <tr><th>Vehicle No</th><th>Type</th><th>Capacity</th><th>Assigned</th><th>Overflow Used</th><th>Side</th><th>Segment</th></tr>
-      ${preview.map(p=>`<tr>
-        <td>${p.vehicle_no}</td><td>${p.vehicle_type}</td><td>${p.capacity}</td><td>${p.assigned}</td><td>${p.overflow_used}</td><td>${p.side_label}</td><td>${p.segment}</td>
-      </tr>`).join('')}
-    `;
-  }
-
-  async function doPreview(){
-    saveSettings();
-    const vehicle_ids = selectedVehicleIds();
-    if(!vehicle_ids.length) throw new Error('Vehicle select කරන්න');
-    const out = await api.post(`/ta/requests/${currentRequest.request.id}/smart-preview`, { vehicle_ids, settings: getSettings() });
-    renderPreview(out.preview);
-    if(out.missing?.length){
-      document.querySelector('#missingBox').textContent = `⚠️ Missing place/coords: ${out.missing.length} (manual fix needed)`;
-    } else {
-      document.querySelector('#missingBox').textContent = '✅ No missing places.';
+  function usedVehicleIds(){
+    const used = new Set();
+    for (const set of selections.values()) {
+      for (const id of set) used.add(id);
     }
+    return used;
   }
 
-  document.querySelector('#previewBtn').addEventListener('click', async ()=>{
-    try{ await doPreview(); toast('Preview OK'); }catch(e){ toast('❌ '+e.message,'err'); }
+  function renderGroups(){
+    if(!batch){ groupsBox.innerHTML = '<div style="color:var(--muted)">Batch not loaded.</div>'; return; }
+    const used = usedVehicleIds();
+    groupsBox.innerHTML = groups.map(g=>{
+      const sel = selections.get(g.id) || new Set();
+      const sug = g.suggestions;
+      const mix = sug?.suggested_mix;
+      const mixText = mix ? `${mix.buses} BUS + ${mix.vans} VAN` : '-';
+
+      const opts = vehicles.filter(v=>v.active!==false).map(v=>{
+        const disabled = used.has(v.id) && !sel.has(v.id);
+        const checked = sel.has(v.id);
+        return `
+          <label style="display:flex;gap:8px;align-items:center;opacity:${disabled?0.5:1}">
+            <input type="checkbox" data-gid="${g.id}" data-vid="${v.id}" ${checked?'checked':''} ${disabled?'disabled':''}/>
+            <span>${v.vehicle_no} (${v.vehicle_type})</span>
+          </label>
+        `;
+      }).join('');
+
+      return `
+        <div style="border:1px solid var(--stroke);border-radius:16px;padding:14px;margin-bottom:10px;background:rgba(255,255,255,.04)">
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+            <div>
+              <div style="font-weight:900">${g.group_label}</div>
+              <div style="color:var(--muted);font-size:13px">PAX: <b>${g.pax_count}</b> • Side: ${g.side_label}</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-weight:800">Guidance</div>
+              <div style="color:var(--muted);font-size:12px">
+                VAN: ${sug?.suggested_vans} • BUS: ${sug?.suggested_buses} • MIX: ${mixText}
+              </div>
+            </div>
+          </div>
+          <div style="height:10px"></div>
+          <div class="row">
+            <div class="col-12">
+              <div style="font-weight:800;margin-bottom:6px">Select Vehicles (මෙ route එකට)</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">${opts}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  groupsBox.addEventListener('change', (e)=>{
+    const c = e.target;
+    if(!(c instanceof HTMLInputElement)) return;
+    const gid = Number(c.dataset.gid);
+    const vid = Number(c.dataset.vid);
+    if(!Number.isFinite(gid)||!Number.isFinite(vid)) return;
+    const set = selections.get(gid) || new Set();
+    if(c.checked) set.add(vid); else set.delete(vid);
+    selections.set(gid, set);
+    renderGroups();
   });
 
-  document.querySelector('#commitBtn').addEventListener('click', async ()=>{
+  async function loadVehicles(){
+    vehicles = await api.get('/lookup/vehicles');
+    renderVehicles();
+  }
+
+  async function loadBatch(){
+    const d = dateEl.value;
+    batch = null; groups = []; selections.clear();
+    statusEl.textContent = 'Loading...';
+    const data = await api.get(`/ta/batches?date=${encodeURIComponent(d)}`);
+    batch = data.batch;
+    groups = data.groups;
+    // preload existing selections
+    for (const g of groups) {
+      const set = new Set((g.selected_vehicles||[]).map(x=>x.vehicle_id));
+      selections.set(g.id, set);
+    }
+    statusEl.textContent = `Batch: ${batch.batch_date} • Status: ${batch.status}`;
+    renderGroups();
+  }
+
+  document.querySelector('#reload').addEventListener('click', async ()=>{
+    try{ await loadBatch(); toast('✅ Loaded'); }catch(e){ toast('❌ '+e.message,'err'); statusEl.textContent=''; }
+  });
+
+  document.querySelector('#submit').addEventListener('click', async ()=>{
     try{
-      saveSettings();
-      const vehicle_ids = selectedVehicleIds();
-      if(!vehicle_ids.length) throw new Error('Vehicle select කරන්න');
-      const out = await api.post(`/ta/requests/${currentRequest.request.id}/smart-commit`, { vehicle_ids, settings: getSettings() });
-      renderPreview(out.preview);
-      toast('✅ Saved (TA_ASSIGNED)');
-      await loadRequest(currentRequest.request.id);
+      if(!batch) throw new Error('Batch load කරන්න');
+      const payload = {
+        selections: groups.map(g=>({ group_id: g.id, vehicle_ids: [...(selections.get(g.id)||new Set())] })),
+        submit: true
+      };
+      await api.post(`/ta/batches/${batch.id}/plan`, payload);
+      toast('✅ Submitted to HR');
+      await loadBatch();
     }catch(e){ toast('❌ '+e.message,'err'); }
   });
 
-  function renderManualTable(){
-    const t = document.querySelector('#empTable');
-    const emps = currentRequest?.employees || [];
-    t.innerHTML = `
-      <tr><th>EMP</th><th>Place</th><th>Assigned Vehicle</th><th>Action</th></tr>
-      ${emps.map(e=>{
-        const options = ['<option value="">(Unassigned)</option>', ...vehicles.map(v=>`<option value="${v.id}" ${e.assigned_vehicle_id===v.id?'selected':''}>${v.vehicle_no} (${v.vehicle_type})</option>`)].join('');
-        return `<tr>
-          <td>${e.emp_no} ${e.name}</td>
-          <td>${e.place_title||''}</td>
-          <td><select data-eid="${e.employee_id}">${options}</select></td>
-          <td><button class="btn" data-save="${e.employee_id}">Save</button></td>
-        </tr>`;
-      }).join('')}
-    `;
-  }
-
-  document.querySelector('#empTable').addEventListener('click', async (e)=>{
-    const id = e.target.dataset.save;
-    if(!id) return;
-    try{
-      const sel = document.querySelector(`#empTable select[data-eid="${id}"]`);
-      const v = sel.value ? Number(sel.value) : null;
-      await api.post(`/ta/requests/${currentRequest.request.id}/assign`, { employee_id: Number(id), vehicle_id: v });
-      toast('✅ Updated');
-      await loadRequest(currentRequest.request.id);
-    }catch(err){ toast('❌ '+err.message,'err'); }
-  });
-
-  document.querySelector('#pdfVeh').addEventListener('click', ()=>{
-    if(!currentRequest) return;
-    window.open(`${API_BASE}/ta/reports/vehicle-wise?request_id=${currentRequest.request.id}`, '_blank');
-  });
-  document.querySelector('#pdfSide').addEventListener('click', ()=>{
-    if(!currentRequest) return;
-    window.open(`${API_BASE}/ta/reports/side-wise?request_id=${currentRequest.request.id}`, '_blank');
-  });
-
-  // init
-  loadSettings();
   await loadVehicles();
-  await loadRequests();
+  await loadBatch();
 </script>
 </body>
 </html>
