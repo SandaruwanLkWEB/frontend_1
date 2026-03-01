@@ -84,6 +84,25 @@
         </div>
         <div style="height:12px"></div>
         <pre id="importOut" style="white-space:pre-wrap;color:var(--muted)"></pre>
+
+        <div style="height:18px"></div>
+        <div class="card" id="devSeedCard" style="display:none">
+          <h3 style="margin-top:0">🧪 DEV Seed (Test Data)</h3>
+          <p style="color:var(--muted);margin-top:0">
+            මෙක DEV test සඳහා විතරයි. DB එක සම්පූර්ණයෙන් wipe කරලා (tables reset) 10 Departments + 250 Employees + 20 Vehicles + අද දවසට SUBMITTED Requests seed කරයි.
+          </p>
+          <div class="row">
+            <div class="col-6">
+              <label>Seed Date (optional)</label>
+              <input id="seedDate" placeholder="YYYY-MM-DD (empty = අද)" />
+            </div>
+            <div class="col-6" style="display:flex;align-items:end;gap:10px">
+              <button class="btn danger" id="reseedBtn">⚠️ Reset & Seed Now</button>
+            </div>
+          </div>
+          <div style="height:10px"></div>
+          <pre id="seedOut" style="white-space:pre-wrap;color:var(--muted)"></pre>
+        </div>
       </div>
 
     </div>
@@ -245,10 +264,35 @@
     }catch(e){ toast('❌ '+e.message,'err'); }
   });
 
+  // DEV seed (enabled only when backend env DEV_SEED_ENABLED=true)
+  async function initDevSeed(){
+    try{
+      const s = await api.get('/admin/dev/seed-enabled');
+      if(!s?.enabled) return;
+      const card = document.querySelector('#devSeedCard');
+      card.style.display = 'block';
+
+      document.querySelector('#reseedBtn').addEventListener('click', async ()=>{
+        if(!confirm('⚠️ DB එක wipe කරලා seed කරනවා. Continue?')) return;
+        try{
+          const date = document.querySelector('#seedDate').value.trim();
+          const body = date ? { date } : {};
+          const out = await api.post('/admin/dev/reseed', body);
+          document.querySelector('#seedOut').textContent = JSON.stringify(out,null,2);
+          toast('✅ Seed completed');
+          await loadDepts();
+          await loadVehicles();
+          await loadApprovals();
+        }catch(e){ toast('❌ '+e.message,'err'); }
+      });
+    }catch(e){ /* ignore */ }
+  }
+
   // init
   await loadDepts();
   await loadVehicles();
   await loadApprovals();
+  await initDevSeed();
 </script>
 </body>
 </html>
